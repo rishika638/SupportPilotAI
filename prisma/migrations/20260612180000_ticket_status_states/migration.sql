@@ -1,0 +1,4 @@
+-- Extend TicketStatus enum for full ticket state machine
+ALTER TYPE "TicketStatus" ADD VALUE IF NOT EXISTS 'ASSIGNED';
+ALTER TYPE "TicketStatus" ADD VALUE IF NOT EXISTS 'ESCALATED';
+ALTER TYPE "TicketStatus" RENAME VALUE 'WAITING_ON_CUSTOMER' TO 'WAITING_CUSTOMER';

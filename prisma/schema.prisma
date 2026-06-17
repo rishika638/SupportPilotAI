@@ -1,0 +1,531 @@
+// SupportPilot AI — Phase 4 Database Schema
+// Multi-tenant: shared database, shared schema, organization-scoped rows
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum OrganizationStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum OrganizationPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+/// RBAC role scoped to an organization membership
+enum UserRole {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+/// Ticket lifecycle states
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketChannel {
+  EMAIL
+  CHAT
+  PHONE
+  WEB
+  API
+}
+
+enum CommentVisibility {
+  PUBLIC
+  INTERNAL
+}
+
+enum AssignmentType {
+  MANUAL
+  AUTO_ROUND_ROBIN
+  AUTO_RULE
+  ESCALATION
+  REASSIGN
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  ASSIGN
+  ESCALATE
+  CLASSIFY
+  SLA_BREACH
+  NOTIFY
+  EXPORT
+  INVITE
+  REVOKE
+}
+
+enum SlaMetricType {
+  FIRST_RESPONSE
+  RESOLUTION
+}
+
+enum AIAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  TICKET_ASSIGNED
+  TICKET_COMMENT
+  SLA_WARNING
+  SLA_BREACH
+  ESCALATION
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// =============================================================================
+// TENANT ROOT
+// =============================================================================
+
+model Organization {
+  id        String             @id @default(uuid()) @db.Uuid
+  name      String             @db.VarChar(255)
+  slug      String             @unique @db.VarChar(100)
+  status    OrganizationStatus @default(TRIAL)
+  plan      OrganizationPlan   @default(FREE)
+  timezone  String             @default("UTC") @db.VarChar(64)
+  locale    String             @default("en-US") @db.VarChar(16)
+  settings  Json               @default("{}")
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  deletedAt DateTime?          @map("deleted_at")
+
+  members         OrganizationMember[]
+  teams           Team[]
+  tickets         Ticket[]
+  ticketComments  TicketComment[]
+  assignments     TicketAssignment[]
+  auditLogs       AuditLog[]
+  slaConfigs      SLAConfig[]
+  aiAnalyses      AIAnalysis[]
+  notifications   Notification[]
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([status])
+  @@index([plan])
+  @@index([deletedAt])
+  @@map("organizations")
+}
+
+// =============================================================================
+// IDENTITY & RBAC
+// =============================================================================
+
+/// Global user identity. Org membership and role live on OrganizationMember.
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(320)
+  passwordHash String?   @map("password_hash") @db.VarChar(255)
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  avatarUrl    String?   @map("avatar_url") @db.VarChar(2048)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  memberships           OrganizationMember[]
+  teamMemberships       TeamMember[]
+  assignedTickets       Ticket[]             @relation("TicketAssignee")
+  createdTickets        Ticket[]             @relation("TicketCreator")
+  ticketComments        TicketComment[]
+  assignmentsAsAssignee TicketAssignment[]   @relation("AssignmentAssignee")
+  assignmentsAsActor    TicketAssignment[]   @relation("AssignmentActor")
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  refreshTokens         RefreshToken[]
+
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Join table: user membership in an organization with RBAC role
+model OrganizationMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  role           UserRole         @default(AGENT)
+  status         MembershipStatus @default(INVITED)
+  invitedAt      DateTime?        @map("invited_at")
+  joinedAt       DateTime?        @map("joined_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, role])
+  @@index([organizationId, status])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  deviceId  String?   @map("device_id") @db.VarChar(128)
+  userAgent String?   @map("user_agent") @db.VarChar(512)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// TEAMS
+// =============================================================================
+
+model Team {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+  tickets      Ticket[]
+  assignments  TicketAssignment[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, isDefault])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  isLead    Boolean  @default(false) @map("is_lead")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+// =============================================================================
+// TICKETS
+// =============================================================================
+
+model Ticket {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @map("organization_id") @db.Uuid
+  ticketNumber    Int            @map("ticket_number")
+  externalId      String?        @map("external_id") @db.VarChar(255)
+  subject         String         @db.VarChar(500)
+  description     String         @db.Text
+  status          TicketStatus   @default(OPEN)
+  priority        TicketPriority @default(MEDIUM)
+  channel         TicketChannel  @default(WEB)
+  customerEmail   String?        @map("customer_email") @db.VarChar(320)
+  customerName    String?        @map("customer_name") @db.VarChar(255)
+  assigneeId      String?        @map("assignee_id") @db.Uuid
+  teamId          String?        @map("team_id") @db.Uuid
+  createdById     String?        @map("created_by_id") @db.Uuid
+  firstResponseAt DateTime?      @map("first_response_at")
+  resolvedAt      DateTime?      @map("resolved_at")
+  closedAt        DateTime?      @map("closed_at")
+  metadata        Json           @default("{}")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  deletedAt       DateTime?      @map("deleted_at")
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee      User?              @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  team          Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy     User?              @relation("TicketCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  comments      TicketComment[]
+  assignments   TicketAssignment[]
+  aiAnalyses    AIAnalysis[]
+  notifications Notification[]
+
+  @@unique([organizationId, ticketNumber])
+  @@unique([organizationId, externalId])
+  @@index([organizationId, status, priority])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, assigneeId])
+  @@index([organizationId, teamId])
+  @@index([organizationId, deletedAt])
+  @@index([customerEmail])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id              String            @id @default(uuid()) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  ticketId        String            @map("ticket_id") @db.Uuid
+  authorId        String            @map("author_id") @db.Uuid
+  body            String            @db.Text
+  visibility      CommentVisibility @default(PUBLIC)
+  isFirstResponse Boolean           @default(false) @map("is_first_response")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, ticketId, createdAt(sort: Desc)])
+  @@index([ticketId, createdAt(sort: Desc)])
+  @@map("ticket_comments")
+}
+
+/// Append-only assignment history. Current assignee is denormalized on Ticket.
+model TicketAssignment {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  ticketId       String         @map("ticket_id") @db.Uuid
+  assigneeId     String?        @map("assignee_id") @db.Uuid
+  teamId         String?        @map("team_id") @db.Uuid
+  assignedById   String?        @map("assigned_by_id") @db.Uuid
+  assignmentType AssignmentType @map("assignment_type")
+  reason         String?        @db.VarChar(500)
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("AssignmentAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignedBy   User?        @relation("AssignmentActor", fields: [assignedById], references: [id], onDelete: SetNull)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([ticketId, createdAt(sort: Desc)])
+  @@index([organizationId, assigneeId])
+  @@map("ticket_assignments")
+}
+
+// =============================================================================
+// SLA
+// =============================================================================
+
+/// Org-level SLA policy definitions matched by priority + metric type
+model SLAConfig {
+  id                     String         @id @default(uuid()) @db.Uuid
+  organizationId         String         @map("organization_id") @db.Uuid
+  name                   String         @db.VarChar(255)
+  description            String?        @db.VarChar(1000)
+  metricType             SlaMetricType  @map("metric_type")
+  priority               TicketPriority
+  targetMinutes          Int            @map("target_minutes")
+  warningThresholdPct    Int            @default(80) @map("warning_threshold_pct")
+  pauseOnWaitingCustomer Boolean        @default(true) @map("pause_on_waiting_customer")
+  isDefault              Boolean        @default(false) @map("is_default")
+  isActive               Boolean        @default(true) @map("is_active")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  deletedAt              DateTime?      @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricType, priority])
+  @@index([organizationId, isActive])
+  @@index([organizationId, deletedAt])
+  @@map("sla_configs")
+}
+
+// =============================================================================
+// AI
+// =============================================================================
+
+model AIAnalysis {
+  id                String           @id @default(uuid()) @db.Uuid
+  organizationId    String           @map("organization_id") @db.Uuid
+  ticketId          String           @map("ticket_id") @db.Uuid
+  status            AIAnalysisStatus @default(PENDING)
+  category          String?          @db.VarChar(255)
+  subcategory       String?          @db.VarChar(255)
+  sentiment         String?          @db.VarChar(50)
+  suggestedPriority TicketPriority?  @map("suggested_priority")
+  confidence        Decimal?         @db.Decimal(5, 4)
+  summary           String?          @db.Text
+  tags              String[]         @default([])
+  modelVersion      String?          @map("model_version") @db.VarChar(100)
+  promptVersion     String?          @map("prompt_version") @db.VarChar(50)
+  tokenCount        Int?             @map("token_count")
+  latencyMs         Int?             @map("latency_ms")
+  errorMessage      String?          @map("error_message") @db.Text
+  rawResponse       Json?            @map("raw_response")
+  completedAt       DateTime?        @map("completed_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, ticketId, createdAt(sort: Desc)])
+  @@index([organizationId, status])
+  @@index([ticketId])
+  @@map("ai_analyses")
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  userId         String              @map("user_id") @db.Uuid
+  ticketId       String?             @map("ticket_id") @db.Uuid
+  type           NotificationType
+  channel        NotificationChannel @default(IN_APP)
+  status         NotificationStatus  @default(PENDING)
+  title          String              @db.VarChar(255)
+  body           String              @db.Text
+  payload        Json                @default("{}")
+  sentAt         DateTime?           @map("sent_at")
+  readAt         DateTime?           @map("read_at")
+  failedAt       DateTime?           @map("failed_at")
+  errorMessage   String?             @map("error_message") @db.VarChar(500)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticket       Ticket?      @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId, createdAt(sort: Desc)])
+  @@index([organizationId, userId, status])
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([ticketId])
+  @@map("notifications")
+}
+
+// =============================================================================
+// AUDIT & IDEMPOTENCY
+// =============================================================================
+
+/// Immutable compliance audit trail — append-only, never updated
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  actorId        String?     @map("actor_id") @db.Uuid
+  action         AuditAction
+  resourceType   String      @map("resource_type") @db.VarChar(100)
+  resourceId     String      @map("resource_id") @db.Uuid
+  beforeState    Json?       @map("before_state")
+  afterState     Json?       @map("after_state")
+  ipAddress      String?     @map("ip_address") @db.VarChar(45)
+  userAgent      String?     @map("user_agent") @db.VarChar(512)
+  correlationId  String?     @map("correlation_id") @db.VarChar(128)
+  metadata       Json        @default("{}")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, resourceType, resourceId])
+  @@index([organizationId, actorId, createdAt(sort: Desc)])
+  @@index([organizationId, action, createdAt(sort: Desc)])
+  @@index([correlationId])
+  @@map("audit_logs")
+}
+
+/// DB fallback for idempotent write deduplication (Redis is primary at runtime)
+model IdempotencyKey {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  key            String            @db.VarChar(128)
+  requestHash    String            @map("request_hash") @db.VarChar(64)
+  httpMethod     String            @map("http_method") @db.VarChar(10)
+  requestPath    String            @map("request_path") @db.VarChar(512)
+  status         IdempotencyStatus @default(PROCESSING)
+  responseStatus Int?              @map("response_status")
+  responseBody   Json?             @map("response_body")
+  expiresAt      DateTime          @map("expires_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  completedAt    DateTime?         @map("completed_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, expiresAt])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
