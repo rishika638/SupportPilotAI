@@ -7,6 +7,7 @@ const connection = {
   port: redisConfig.port,
   password: redisConfig.password || undefined,
   db: redisConfig.db,
+  tls: redisConfig.tls,
 };
 
 export const QUEUE_NAMES = {
@@ -15,6 +16,7 @@ export const QUEUE_NAMES = {
 } as const;
 
 const queues = new Map<string, Queue>();
+const workers = new Set<Worker>();
 
 export function getQueue(name: string): Queue {
   if (!queues.has(name)) {
@@ -39,13 +41,17 @@ export function createWorker(
   processor: Processor,
   opts?: Partial<WorkerOptions>,
 ): Worker {
-  return new Worker(name, processor, {
+  const worker = new Worker(name, processor, {
     connection,
     concurrency: 5,
     ...opts,
   });
+  workers.add(worker);
+  worker.on("closed", () => workers.delete(worker));
+  return worker;
 }
 
 export async function closeQueues(): Promise<void> {
+  await Promise.all([...workers].map((worker) => worker.close()));
   await Promise.all([...queues.values()].map((q) => q.close()));
 }

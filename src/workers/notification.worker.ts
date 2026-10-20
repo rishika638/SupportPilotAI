@@ -33,6 +33,10 @@ export function startNotificationWorker(): Worker {
     },
   );
 
+  worker.on("ready", () => {
+    logger.info({ queue: QUEUE_NAMES.NOTIFICATION_DISPATCH }, "Notification worker ready and consuming jobs");
+  });
+
   logger.info(
   {
     queue: QUEUE_NAMES.NOTIFICATION_DISPATCH,

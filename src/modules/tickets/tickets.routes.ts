@@ -41,11 +41,24 @@ ticketsRouter.get(
   asyncHandler(ticketsController.getById),
 );
 
+ticketsRouter.get(
+  "/:id/ai-analysis",
+  validateParams(ticketIdParamsSchema),
+  asyncHandler(ticketsController.getAIAnalysis),
+);
+
 ticketsRouter.patch(
   "/:id",
   validateParams(ticketIdParamsSchema),
   validateBody(updateTicketSchema),
   asyncHandler(ticketsController.update),
+);
+
+ticketsRouter.delete(
+  "/:id",
+  managerOrAdmin,
+  validateParams(ticketIdParamsSchema),
+  asyncHandler(ticketsController.delete),
 );
 
 ticketsRouter.post(

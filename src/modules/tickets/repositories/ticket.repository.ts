@@ -74,12 +74,7 @@ export class TicketRepository {
     tickets: TicketWithRelations[];
     total: number;
   }> {
-    console.log("FILTERS =>", filters);
-
     const where = this.buildWhereClause(filters);
-
-    console.log("WHERE =>", JSON.stringify(where, null, 2));
-
     const orderBy = this.buildOrderBy(filters.sortBy, filters.sortOrder);
 
     const [tickets, total] = await Promise.all([
@@ -103,26 +98,46 @@ export class TicketRepository {
       "organization" | "ticketNumber" | "organizationId"
     >,
   ): Promise<TicketWithRelations> {
-    return prisma.$transaction(async (tx) => {
-      const latest = await tx.ticket.findFirst({
-        where: { organizationId },
-        orderBy: { ticketNumber: "desc" },
-        select: { ticketNumber: true },
-      });
+    const maxRetries = 3;
+    let attempt = 0;
 
-      const ticketNumber = latest
-        ? latest.ticketNumber + 1
-        : TICKET_NUMBER_START;
+    while (attempt < maxRetries) {
+      attempt++;
+      try {
+        return await prisma.$transaction(async (tx) => {
+          // Serialize ticket-number allocation per organization using row lock
+          await tx.$executeRaw`SELECT id FROM organizations WHERE id = ${organizationId}::uuid FOR UPDATE`;
 
-      return tx.ticket.create({
-        data: {
-          ...data,
-          organization: { connect: { id: organizationId } },
-          ticketNumber,
-        },
-        include: ticketInclude,
-      });
-    });
+          const latest = await tx.ticket.findFirst({
+            where: { organizationId },
+            orderBy: { ticketNumber: "desc" },
+            select: { ticketNumber: true },
+          });
+
+          const ticketNumber = latest
+            ? latest.ticketNumber + 1
+            : TICKET_NUMBER_START;
+
+          return await tx.ticket.create({
+            data: {
+              ...data,
+              organization: { connect: { id: organizationId } },
+              ticketNumber,
+            },
+            include: ticketInclude,
+          });
+        });
+      } catch (err: unknown) {
+        const isConflict =
+          err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2002";
+        if (isConflict && attempt < maxRetries) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new Error("Failed to allocate unique ticket number after retries");
   }
 
   async updateFields(
@@ -162,12 +177,14 @@ export class TicketRepository {
       resolvedAt?: Date;
       closedAt?: Date;
     },
+    expectedCurrentStatus?: TicketStatus,
   ): Promise<TicketWithRelations> {
     const result = await tx.ticket.updateMany({
       where: {
         id: ticketId,
         organizationId,
         deletedAt: null,
+        ...(expectedCurrentStatus ? { status: expectedCurrentStatus } : {}),
       },
       data: {
         status,
@@ -184,7 +201,7 @@ export class TicketRepository {
     });
 
     if (result.count === 0) {
-      throw new Error("Ticket not found");
+      throw new Error("Ticket status update failed: status conflict or ticket not found");
     }
 
     const updated = await tx.ticket.findFirst({
@@ -197,6 +214,26 @@ export class TicketRepository {
     }
 
     return updated;
+  }
+
+  async softDelete(
+    organizationId: string,
+    ticketId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const client = tx ?? prisma;
+    const result = await client.ticket.updateMany({
+      where: {
+        id: ticketId,
+        organizationId,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    return result.count > 0;
   }
 
   async updateAssignment(

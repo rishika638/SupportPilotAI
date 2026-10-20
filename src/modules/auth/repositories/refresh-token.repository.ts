@@ -10,7 +10,11 @@ export interface CreateRefreshTokenInput {
 }
 
 export class RefreshTokenRepository {
-  async create(input: CreateRefreshTokenInput): Promise<RefreshToken> {
+  async create(
+    input: CreateRefreshTokenInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<RefreshToken> {
+    const client = tx ?? prisma;
     const data: Prisma.RefreshTokenCreateInput = {
       user: { connect: { id: input.userId } },
       tokenHash: input.tokenHash,
@@ -19,11 +23,15 @@ export class RefreshTokenRepository {
       ipAddress: input.ipAddress,
     };
 
-    return prisma.refreshToken.create({ data });
+    return client.refreshToken.create({ data });
   }
 
-  async findValidByHash(tokenHash: string): Promise<RefreshToken | null> {
-    return prisma.refreshToken.findFirst({
+  async findValidByHash(
+    tokenHash: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<RefreshToken | null> {
+    const client = tx ?? prisma;
+    return client.refreshToken.findFirst({
       where: {
         tokenHash,
         revokedAt: null,
@@ -34,8 +42,12 @@ export class RefreshTokenRepository {
     });
   }
 
-  async revokeByHash(tokenHash: string): Promise<boolean> {
-    const result = await prisma.refreshToken.updateMany({
+  async revokeByHash(
+    tokenHash: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const client = tx ?? prisma;
+    const result = await client.refreshToken.updateMany({
       where: {
         tokenHash,
         revokedAt: null,
@@ -48,8 +60,12 @@ export class RefreshTokenRepository {
     return result.count > 0;
   }
 
-  async revokeAllForUser(userId: string): Promise<number> {
-    const result = await prisma.refreshToken.updateMany({
+  async revokeAllForUser(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<number> {
+    const client = tx ?? prisma;
+    const result = await client.refreshToken.updateMany({
       where: {
         userId,
         revokedAt: null,

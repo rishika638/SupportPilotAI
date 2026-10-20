@@ -1,4 +1,4 @@
-import { Organization, OrganizationMember, User } from "@prisma/client";
+import { Organization, OrganizationMember, Prisma, User } from "@prisma/client";
 import { jwtConfig } from "../../config/jwt";
 import {
   hashToken,
@@ -8,6 +8,7 @@ import {
 } from "../../infrastructure/auth/jwt.service";
 import { hashPassword, verifyPassword } from "../../infrastructure/auth/password.service";
 import { prisma } from "../../infrastructure/database/prisma.client";
+import { logger } from "../../infrastructure/logger/pino.logger";
 import {
   AuthenticationError,
   ConflictError,
@@ -142,35 +143,110 @@ export class AuthService {
     input: RefreshTokenInput,
     context: AuthRequestContext = {},
   ): Promise<RefreshResponseDto> {
-    const payload = verifyRefreshToken(input.refreshToken);
-    const tokenHash = hashToken(input.refreshToken);
-
-    const storedToken = await refreshTokenRepository.findValidByHash(tokenHash);
-
-    if (!storedToken || storedToken.userId !== payload.sub) {
+    let payload: { sub: string };
+    try {
+      payload = verifyRefreshToken(input.refreshToken);
+    } catch {
       throw new AuthenticationError("Invalid refresh token", "INVALID_REFRESH_TOKEN");
     }
+    const tokenHash = hashToken(input.refreshToken);
 
-    const user = await userRepository.findByIdWithMemberships(payload.sub);
+    // Pre-validate user and membership BEFORE opening the write transaction.
+    // This prevents ForbiddenError throws inside the tx from rolling back the
+    // already-committed step-1 token revocation.
+    // This read is a consistent snapshot; the token's atomic revoke inside the
+    // tx below still guards against concurrent refresh races.
+    const userSnapshot = await prisma.user.findFirst({
+      where: { id: payload.sub, isActive: true, deletedAt: null },
+      include: {
+        memberships: {
+          where: { deletedAt: null, status: "ACTIVE" },
+          include: { organization: true },
+        },
+      },
+    });
 
-    if (!user || user.memberships.length === 0) {
+    if (!userSnapshot || userSnapshot.memberships.length === 0) {
       throw new ForbiddenError(
         "No active organization membership found",
         "NO_ACTIVE_MEMBERSHIP",
       );
     }
 
-    const primaryMembership = user.memberships[0];
+    const primaryMembership = userSnapshot.memberships[0];
     const organization = primaryMembership.organization;
 
-    await refreshTokenRepository.revokeByHash(tokenHash);
+    if (organization.deletedAt) {
+      throw new ForbiddenError(
+        "Organization is no longer available",
+        "ORGANIZATION_UNAVAILABLE",
+      );
+    }
 
-    const tokens = await this.issueTokenPair(
-      user,
-      primaryMembership,
-      organization,
-      context,
-    );
+    let tokens: { accessToken: string; refreshToken: string; expiresIn: string };
+    try {
+      tokens = await prisma.$transaction(async (tx) => {
+        const now = new Date();
+
+        // 1. Atomically revoke the presented token — this is the only write
+        //    in this transaction, so no ForbiddenError can roll it back.
+        const revokeResult = await tx.refreshToken.updateMany({
+          where: {
+            tokenHash,
+            revokedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { revokedAt: now },
+        });
+
+        if (revokeResult.count === 0) {
+          // Token was already revoked, expired, or doesn't exist.
+          const existing = await tx.refreshToken.findFirst({
+            where: { tokenHash },
+          });
+
+          if (existing && existing.revokedAt !== null) {
+            // Token reuse detected — carry userId out via error property so
+            // the catch block can commit revocations in a separate transaction
+            // (throwing here rolls back this tx, which is intentional: we
+            // must not issue a new token pair).
+            throw Object.assign(
+              new AuthenticationError(
+                "Refresh token reuse detected. All sessions revoked.",
+                "INVALID_REFRESH_TOKEN",
+              ),
+              { _revokeUserId: existing.userId },
+            );
+          }
+
+          throw new AuthenticationError("Invalid refresh token", "INVALID_REFRESH_TOKEN");
+        }
+
+        // 2. Issue and persist new token pair within the same transaction.
+        //    Uses the pre-validated snapshot — no ForbiddenError can fire here.
+        return this.issueTokenPair(
+          userSnapshot,
+          primaryMembership,
+          organization,
+          context,
+          tx,
+        );
+      });
+    } catch (err: unknown) {
+      // If reuse was detected the tx rolled back (no new token issued).
+      // Commit the full-session revocation in a fresh transaction so it
+      // actually persists.
+      const revokeUserId = (err as Record<string, unknown>)._revokeUserId;
+      if (typeof revokeUserId === "string") {
+        await refreshTokenRepository.revokeAllForUser(revokeUserId).catch((revokeErr) => {
+          logger.error(
+            { err: revokeErr, userId: revokeUserId },
+            "CRITICAL: failed to revoke all sessions after token reuse detection",
+          );
+        });
+      }
+      throw err;
+    }
 
     return { tokens };
   }
@@ -204,6 +280,7 @@ export class AuthService {
     membership: OrganizationMember,
     organization: Organization,
     context: AuthRequestContext,
+    tx?: Prisma.TransactionClient,
   ) {
     const accessToken = signAccessToken({
       sub: user.id,
@@ -214,13 +291,16 @@ export class AuthService {
 
     const refresh = signRefreshToken(user.id);
 
-    await refreshTokenRepository.create({
-      userId: user.id,
-      tokenHash: hashToken(refresh.token),
-      expiresAt: refresh.expiresAt,
-      userAgent: context.userAgent,
-      ipAddress: context.ipAddress,
-    });
+    await refreshTokenRepository.create(
+      {
+        userId: user.id,
+        tokenHash: hashToken(refresh.token),
+        expiresAt: refresh.expiresAt,
+        userAgent: context.userAgent,
+        ipAddress: context.ipAddress,
+      },
+      tx,
+    );
 
     return {
       accessToken,

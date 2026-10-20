@@ -3,22 +3,29 @@ import { logger } from "../infrastructure/logger/pino.logger";
 import { createWorker, QUEUE_NAMES } from "../infrastructure/queue/queue.factory";
 import { aiAnalysisService, AIAnalysisJobPayload } from "../modules/ai/ai-analysis.service";
 import { getAIProvider } from "../modules/ai/providers/provider.factory";
+import { aiAnalysisSchema } from "../modules/ai/providers/ai.provider";
 
 async function processAIAnalysis(job: Job<AIAnalysisJobPayload>): Promise<void> {
-  const { analysisId, ticketId, subject, description } = job.data;
+  const { analysisId, ticketId, organizationId, subject, description } = job.data;
 
   await aiAnalysisService.markProcessing(analysisId);
 
   const start = Date.now();
   const provider = getAIProvider();
-  const result = await provider.analyze(subject, description);
+  const rawResult = await provider.analyze(subject, description);
+  const validated = aiAnalysisSchema.parse(rawResult);
   const latencyMs = Date.now() - start;
 
-  await aiAnalysisService.markCompleted(analysisId, {
-    ...result,
-    rawResponse: result as object,
-    latencyMs,
-  });
+  await aiAnalysisService.markCompleted(
+    analysisId,
+    {
+      ...validated,
+      rawResponse: validated as object,
+      latencyMs,
+    },
+    ticketId,
+    organizationId,
+  );
 
   logger.info({ analysisId, ticketId, latencyMs }, "AI analysis completed");
 }
@@ -28,6 +35,8 @@ let _worker: Worker | null = null;
 export function startAIAnalysisWorker(): Worker {
   if (_worker) return _worker;
 
+  getAIProvider();
+
   const worker = createWorker(QUEUE_NAMES.AI_ANALYSIS, async (job: Job<AIAnalysisJobPayload>) => {
     try {
       await processAIAnalysis(job);
@@ -36,6 +45,10 @@ export function startAIAnalysisWorker(): Worker {
       await aiAnalysisService.markFailed(job.data.analysisId, (err as Error).message);
       throw err;
     }
+  });
+
+  worker.on("ready", () => {
+    logger.info({ queue: QUEUE_NAMES.AI_ANALYSIS }, "AI analysis worker ready and consuming jobs");
   });
 
   logger.info(

@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { Request } from "express";
 import { prisma } from "../../infrastructure/database/prisma.client";
+import { logger } from "../../infrastructure/logger/pino.logger";
 import { ErrorCodes } from "../../shared/errors/error-codes";
 import { NotFoundError } from "../../shared/errors/app.error";
 import { ForbiddenError } from "../../shared/errors/auth.errors";
@@ -44,6 +45,12 @@ import { ticketRepository, TicketWithRelations } from "./repositories/ticket.rep
 const TICKET_NUMBER_PREFIX = "SP-";
 
 export class TicketsService {
+  constructor(
+    private readonly ticketReader: Pick<typeof ticketRepository, "findById"> = ticketRepository,
+    private readonly analysisReader: Pick<typeof aiAnalysisService, "getLatestForTicket"> =
+      aiAnalysisService,
+  ) {}
+
   async createTicket(
     req: Request,
     organization: Organization,
@@ -76,8 +83,7 @@ export class TicketsService {
     aiAnalysisService
       .enqueue(ticket.id, organization.id, ticket.subject, ticket.description)
       .catch((err) => {
-        // Non-blocking: log but don't fail ticket creation
-        console.error({ err, ticketId: ticket.id }, "Failed to enqueue AI analysis");
+        logger.error({ err, ticketId: ticket.id }, "Failed to enqueue AI analysis");
       });
 
     return this.toTicketDto(ticket);
@@ -111,6 +117,26 @@ export class TicketsService {
     await this.assertTicketAccess(organizationId, membership, ticket);
 
     return this.toTicketDto(ticket);
+  }
+
+  async getAIAnalysis(
+    organizationId: string,
+    membership: OrganizationMember,
+    ticketId: string,
+  ) {
+    const ticket = await this.ticketReader.findById(organizationId, ticketId);
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found", ErrorCodes.RESOURCE_NOT_FOUND);
+    }
+
+    await this.assertTicketAccess(organizationId, membership, ticket);
+
+    const analysis = await this.analysisReader.getLatestForTicket(organizationId, ticketId);
+    if (!analysis) {
+      throw new NotFoundError("AI analysis not found", ErrorCodes.RESOURCE_NOT_FOUND);
+    }
+
+    return analysis;
   }
 
   async updateTicket(
@@ -155,6 +181,35 @@ export class TicketsService {
     return this.toTicketDto(ticket);
   }
 
+  async deleteTicket(
+    req: Request,
+    organizationId: string,
+    membership: OrganizationMember,
+    ticketId: string,
+  ): Promise<{ message: string }> {
+    if (membership.role !== UserRole.ADMIN && membership.role !== UserRole.MANAGER) {
+      throw new ForbiddenError(
+        "Only admins and managers can delete tickets",
+        ErrorCodes.INSUFFICIENT_ROLE,
+      );
+    }
+
+    const ticket = await this.getTicketOrThrow(organizationId, ticketId);
+    await this.assertTicketAccess(organizationId, membership, ticket);
+
+    const beforeState = this.serializeTicket(ticket) as Prisma.InputJsonValue;
+
+    await prisma.$transaction(async (tx) => {
+      const deleted = await ticketRepository.softDelete(organizationId, ticketId, tx);
+      if (!deleted) {
+        throw new NotFoundError("Ticket not found", ErrorCodes.RESOURCE_NOT_FOUND);
+      }
+      await auditService.logTicketDeleted(req, ticketId, beforeState, tx);
+    });
+
+    return { message: "Ticket deleted successfully" };
+  }
+
   async changeStatus(
     req: Request,
     organizationId: string,
@@ -165,20 +220,37 @@ export class TicketsService {
     const existing = await this.getTicketOrThrow(organizationId, ticketId);
     await this.assertTicketAccess(organizationId, membership, existing);
 
-    const previousStatus = existing.status;
-    ticketStateMachine.assertTransition(previousStatus, input.status);
-
-    const beforeState = this.serializeTicket(existing);
     const now = new Date();
-    const timestamps = this.buildStatusTimestamps(existing, input.status, now);
 
-    const ticket = await prisma.$transaction(async (tx) => {
+    const { updatedTicket, previousStatus } = await prisma.$transaction(async (tx) => {
+      // Row lock ticket to serialize concurrent status updates
+      await tx.$executeRaw`SELECT id FROM tickets WHERE id = ${ticketId}::uuid FOR UPDATE`;
+
+      const current = await tx.ticket.findFirst({
+        where: { id: ticketId, organizationId, deletedAt: null },
+      });
+
+      if (!current) {
+        throw new NotFoundError("Ticket not found", ErrorCodes.RESOURCE_NOT_FOUND);
+      }
+
+      const prev = current.status;
+      ticketStateMachine.assertTransition(prev, input.status);
+
+      const beforeState = this.serializeTicket({
+        ...existing,
+        status: prev,
+      });
+
+      const timestamps = this.buildStatusTimestamps(existing, input.status, now);
+
       const updated = await ticketRepository.updateStatus(
         tx,
         organizationId,
         ticketId,
         input.status,
         timestamps,
+        prev,
       );
 
       await auditService.logTicketStatusChanged(
@@ -189,17 +261,17 @@ export class TicketsService {
         tx,
       );
 
-      return updated;
+      return { updatedTicket: updated, previousStatus: prev };
     });
 
-    if (input.status === TicketStatus.RESOLVED && ticket.assigneeId) {
+    if (input.status === TicketStatus.RESOLVED && updatedTicket.assigneeId) {
       notificationService
-        .notifyTicketResolved(organizationId, ticket.assigneeId, ticketId, this.formatTicketNumber(ticket.ticketNumber))
+        .notifyTicketResolved(organizationId, updatedTicket.assigneeId, ticketId, this.formatTicketNumber(updatedTicket.ticketNumber))
         .catch(() => {});
     }
 
     return {
-      ticket: this.toTicketDto(ticket),
+      ticket: this.toTicketDto(updatedTicket),
       previousStatus,
       newStatus: input.status,
     };
@@ -323,10 +395,28 @@ export class TicketsService {
       );
     }
 
-    const hasFirstResponse = await ticketCommentRepository.hasFirstResponse(ticketId);
-    const isFirstResponse = !hasFirstResponse && isStaff;
-
     const comment = await prisma.$transaction(async (tx) => {
+      // Lock ticket row to serialize concurrent first-response determination
+      await tx.$executeRaw`SELECT id FROM tickets WHERE id = ${ticketId}::uuid FOR UPDATE`;
+
+      const currentTicket = await tx.ticket.findFirst({
+        where: { id: ticketId, organizationId, deletedAt: null },
+      });
+
+      if (!currentTicket) {
+        throw new NotFoundError("Ticket not found", ErrorCodes.RESOURCE_NOT_FOUND);
+      }
+
+      const alreadyHasFirstResponse =
+        currentTicket.firstResponseAt !== null ||
+        (await tx.ticketComment.findFirst({
+          where: { ticketId, isFirstResponse: true, deletedAt: null },
+          select: { id: true },
+        })) !== null;
+
+      const isFirstResponse = !alreadyHasFirstResponse && isStaff;
+      const now = new Date();
+
       const created = await ticketCommentRepository.create(tx, {
         organization: { connect: { id: organizationId } },
         ticket: { connect: { id: ticketId } },
@@ -336,10 +426,10 @@ export class TicketsService {
         isFirstResponse,
       });
 
-      if (isFirstResponse && !ticket.firstResponseAt) {
+      if (isFirstResponse) {
         await tx.ticket.updateMany({
-          where: { id: ticketId, organizationId, deletedAt: null },
-          data: { firstResponseAt: new Date() },
+          where: { id: ticketId, organizationId, firstResponseAt: null, deletedAt: null },
+          data: { firstResponseAt: now },
         });
       }
 

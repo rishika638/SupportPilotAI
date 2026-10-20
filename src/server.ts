@@ -16,10 +16,14 @@ async function bootstrap(): Promise<void> {
   await connectDatabase();
   await connectRedis();
 
-  startAIAnalysisWorker();
-  startNotificationWorker();
-  startSLAScheduler();
-  startCleanupWorker();
+  if (process.env.DISABLE_WORKERS !== "true") {
+    startAIAnalysisWorker();
+    startNotificationWorker();
+    startSLAScheduler();
+    startCleanupWorker();
+  } else {
+    logger.info("In-process background workers disabled (running in API-only mode)");
+  }
 
   const app = createApp();
   const server = createServer(app);

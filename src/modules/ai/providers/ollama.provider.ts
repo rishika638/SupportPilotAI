@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { AIAnalysisResult, AIProvider } from "./ai.provider";
+import { aiAnalysisSchema, type AIAnalysisResult, type AIProvider } from "./ai.provider";
 
 function buildPrompt(subject: string, description: string): string {
   return `Analyze this support ticket and return ONLY valid JSON with no markdown fences.
@@ -47,7 +47,7 @@ export class OllamaProvider implements AIProvider {
 
     const parsed = JSON.parse(text);
 
-    return {
+    return aiAnalysisSchema.parse({
       summary: parsed.summary ?? "",
       category: parsed.category ?? "General",
       subcategory: parsed.subcategory,
@@ -58,6 +58,6 @@ export class OllamaProvider implements AIProvider {
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.8,
       modelVersion: this.model,
       tokenCount: response.usage?.total_tokens,
-    };
+    });
   }
 }

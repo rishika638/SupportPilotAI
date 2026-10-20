@@ -11,7 +11,7 @@ import { idempotencyMiddleware } from "../shared/middleware/idempotency.middlewa
 
 const apiV1Router = Router();
 
-// Auth routes are public — no authenticate/rate-limit needed at router level
+// Public auth routes apply their own IP-based rate limit.
 apiV1Router.use("/auth", authRouter);
 
 // All other routes run authenticate first, then rate-limit and idempotency

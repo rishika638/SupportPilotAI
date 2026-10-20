@@ -1,8 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { AIAnalysisResult, AIProvider } from "./ai.provider";
+import { aiAnalysisSchema, type AIAnalysisResult, type AIProvider } from "./ai.provider";
 
-const MODEL = "gemini-2.0-flash";
-const PROMPT_VERSION = "v1";
+const MODEL = "gemini-3.8-flash";
 
 function buildPrompt(subject: string, description: string): string {
   return `Analyze this support ticket and return ONLY valid JSON with no markdown.
@@ -40,10 +39,9 @@ export class GeminiProvider implements AIProvider {
     }
     const parsed = JSON.parse(text);
 
-    return {
+    return aiAnalysisSchema.parse({
       ...parsed,
       modelVersion: MODEL,
-      promptVersion: PROMPT_VERSION,
-    };
+    });
   }
 }

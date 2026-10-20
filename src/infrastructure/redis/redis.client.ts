@@ -12,6 +12,7 @@ function createRedisClient(): Redis {
     port: redisConfig.port,
     password: redisConfig.password || undefined,
     db: redisConfig.db,
+    tls: redisConfig.tls,
     maxRetriesPerRequest: null,
     lazyConnect: true,
   });

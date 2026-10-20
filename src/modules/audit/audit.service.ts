@@ -110,6 +110,24 @@ export class AuditService {
     );
   }
 
+  async logTicketDeleted(
+    req: Request,
+    ticketId: string,
+    beforeState: Prisma.InputJsonValue,
+    client?: Parameters<typeof auditLogRepository.create>[1],
+  ) {
+    await this.logFromRequest(
+      req,
+      {
+        action: AuditAction.DELETE,
+        resourceType: "Ticket",
+        resourceId: ticketId,
+        beforeState,
+      },
+      client,
+    );
+  }
+
   async logTicketUpdated(
     req: Request,
     ticketId: string,

@@ -18,6 +18,11 @@ function buildMeta(req: Request) {
 }
 
 export class TicketsController {
+  constructor(
+    private readonly analysisService: Pick<typeof ticketsService, "getAIAnalysis"> =
+      ticketsService,
+  ) {}
+
   create = async (req: Request, res: Response): Promise<void> => {
     const input = req.body as CreateTicketInput;
     const ticket = await ticketsService.createTicket(
@@ -52,6 +57,17 @@ export class TicketsController {
     res.status(200).json(successResponse(ticket, buildMeta(req)));
   };
 
+  getAIAnalysis = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params as TicketIdParams;
+    const analysis = await this.analysisService.getAIAnalysis(
+      req.organization!.id,
+      req.membership!,
+      id,
+    );
+
+    res.status(200).json(successResponse(analysis, buildMeta(req)));
+  };
+
   update = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params as TicketIdParams;
     const input = req.body as UpdateTicketInput;
@@ -64,6 +80,18 @@ export class TicketsController {
     );
 
     res.status(200).json(successResponse(ticket, buildMeta(req)));
+  };
+
+  delete = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params as TicketIdParams;
+    const result = await ticketsService.deleteTicket(
+      req,
+      req.organization!.id,
+      req.membership!,
+      id,
+    );
+
+    res.status(200).json(successResponse(result, buildMeta(req)));
   };
 
   changeStatus = async (req: Request, res: Response): Promise<void> => {

@@ -13,11 +13,14 @@ export interface NotificationJobPayload {
 }
 
 export class NotificationService {
-  async dispatch(input: NotificationJobPayload): Promise<void> {
+  async dispatch(input: NotificationJobPayload, customJobId?: string): Promise<void> {
+    const jobId =
+      customJobId ??
+      `notif-${input.organizationId}-${input.userId}-${input.type}-${Date.now()}`;
     await getQueue(QUEUE_NAMES.NOTIFICATION_DISPATCH).add(
       "send-notification",
       input,
-      { jobId: `notif-${input.organizationId}-${input.userId}-${input.type}-${Date.now()}` },
+      { jobId },
     );
   }
 
@@ -80,15 +83,18 @@ export class NotificationService {
     ticketId: string,
     ticketNumber: string,
   ): Promise<void> {
-    await this.dispatch({
-      organizationId,
-      userId: assigneeId,
-      ticketId,
-      type: NotificationType.SLA_BREACH,
-      title: "SLA Breach",
-      body: `Ticket ${ticketNumber} has breached its SLA deadline.`,
-      payload: { ticketId, ticketNumber, event: "SLA_BREACH" },
-    });
+    await this.dispatch(
+      {
+        organizationId,
+        userId: assigneeId,
+        ticketId,
+        type: NotificationType.SLA_BREACH,
+        title: "SLA Breach",
+        body: `Ticket ${ticketNumber} has breached its SLA deadline.`,
+        payload: { ticketId, ticketNumber, event: "SLA_BREACH" },
+      },
+      `notif-sla-breach-${ticketId}`,
+    );
   }
 
   async listForUser(

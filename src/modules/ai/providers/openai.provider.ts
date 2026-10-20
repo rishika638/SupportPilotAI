@@ -1,8 +1,7 @@
 import OpenAI from "openai";
-import type { AIAnalysisResult, AIProvider } from "./ai.provider";
+import { aiAnalysisSchema, type AIAnalysisResult, type AIProvider } from "./ai.provider";
 
 const MODEL = "gpt-4o-mini";
-const PROMPT_VERSION = "v1";
 
 function buildPrompt(subject: string, description: string): string {
   return `Analyze this support ticket and return ONLY valid JSON with no markdown.
@@ -40,11 +39,10 @@ export class OpenAIProvider implements AIProvider {
     const text = response.choices[0].message.content ?? "{}";
     const parsed = JSON.parse(text);
 
-    return {
+    return aiAnalysisSchema.parse({
       ...parsed,
       modelVersion: MODEL,
-      promptVersion: PROMPT_VERSION,
       tokenCount: response.usage?.total_tokens,
-    };
+    });
   }
 }

@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
+import { env, isProduction } from "./config/env";
 import {
   checkDatabaseHealth,
   disconnectDatabase,
@@ -10,6 +11,10 @@ import {
   checkRedisHealth,
   disconnectRedis,
 } from "./infrastructure/redis/redis.client";
+import {
+  metricsMiddleware,
+  metricsService,
+} from "./infrastructure/metrics/metrics.service";
 import { apiV1Router } from "./routes/api-v1.routes";
 import {
   errorHandlerMiddleware,
@@ -22,9 +27,29 @@ export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
+  app.set("trust proxy", env.TRUST_PROXY_HOPS ?? 0);
   app.use(helmet());
+
+  const allowedOrigins = [
+    ...(!isProduction ? ["http://localhost:5173", "http://localhost:4173"] : []),
+    ...(env.FRONTEND_URL ? [env.FRONTEND_URL] : []),
+  ];
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) res.vary("Origin");
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PATCH,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,Idempotency-Key");
+      res.setHeader("Access-Control-Expose-Headers", "X-Request-Id,Idempotent-Replayed");
+    }
+    if (req.method === "OPTIONS") { res.sendStatus(204); return; }
+    next();
+  });
+
   app.use(express.json({ limit: "1mb" }));
   app.use(requestIdMiddleware);
+  app.use(metricsMiddleware);
   app.use(
     pinoHttp({
       logger,
@@ -71,6 +96,35 @@ export function createApp(): Express {
         },
       }),
     );
+  });
+
+  app.get("/metrics", async (req: Request, res: Response) => {
+    const metricsToken = env.METRICS_TOKEN;
+
+    if (!metricsToken && isProduction) {
+      res.status(503).json({
+        success: false,
+        error: { code: "SERVICE_UNAVAILABLE", message: "Metrics endpoint not configured" },
+      });
+      return;
+    }
+
+    if (metricsToken) {
+      const authHeader = req.header("authorization") ?? "";
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+      if (bearer !== metricsToken) {
+        res.status(401).json({
+          success: false,
+          error: { code: "UNAUTHORIZED", message: "Invalid or missing metrics token" },
+        });
+        return;
+      }
+    }
+
+    const output = await metricsService.generatePrometheusOutput();
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.status(200).send(output);
   });
 
   app.use("/api/v1", apiV1Router);
