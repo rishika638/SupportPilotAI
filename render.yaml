@@ -1,9 +1,9 @@
+
 services:
-  # 1. API Web Service
   - type: web
     name: supportpilot-api
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm ci && npx prisma generate && npm run build
     preDeployCommand: npx prisma migrate deploy
@@ -13,17 +13,19 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000
+        value: "10000"
       - key: LOG_LEVEL
         value: info
       - key: FRONTEND_URL
         sync: false
       - key: TRUST_PROXY_HOPS
-        sync: false
+        value: "1"
       - key: DISABLE_WORKERS
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: supportpilot-postgres
+          property: connectionString
       - key: REDIS_HOST
         fromService:
           type: keyvalue
@@ -34,6 +36,12 @@ services:
           type: keyvalue
           name: supportpilot-redis
           property: port
+      - key: REDIS_TLS
+        value: "false"
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -43,76 +51,20 @@ services:
       - key: JWT_REFRESH_EXPIRES_IN
         value: 7d
       - key: BCRYPT_SALT_ROUNDS
-        value: 12
-      - key: REDIS_TLS
-        sync: false
+        value: "12"
       - key: METRICS_TOKEN
         generateValue: true
 
-  # 2. Standalone Background Worker
-  - type: worker
-    name: supportpilot-worker
-    runtime: node
-    plan: starter
-    region: oregon
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: npm run start:worker
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: LOG_LEVEL
-        value: info
-      - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: supportpilot-api
-          envVarKey: FRONTEND_URL
-      - key: TRUST_PROXY_HOPS
-        fromService:
-          type: web
-          name: supportpilot-api
-          envVarKey: TRUST_PROXY_HOPS
-      - key: DATABASE_URL
-        sync: false
-      - key: REDIS_HOST
-        fromService:
-          type: keyvalue
-          name: supportpilot-redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          type: keyvalue
-          name: supportpilot-redis
-          property: port
-      - key: JWT_ACCESS_SECRET
-        fromService:
-          type: web
-          name: supportpilot-api
-          envVarKey: JWT_ACCESS_SECRET
-      - key: JWT_REFRESH_SECRET
-        fromService:
-          type: web
-          name: supportpilot-api
-          envVarKey: JWT_REFRESH_SECRET
-      - key: AI_PROVIDER
-        value: gemini
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: REDIS_TLS
-        sync: false
-
-  # Managed Redis-compatible queue store. Keep external access disabled.
   - type: keyvalue
     name: supportpilot-redis
-    plan: starter
+    plan: free
     region: oregon
     ipAllowList: []
 
 databases:
-  # Managed PostgreSQL
   - name: supportpilot-postgres
     databaseName: supportpilot
     user: supportpilot
-    plan: starter
+    plan: free
     region: oregon
     ipAllowList: []
