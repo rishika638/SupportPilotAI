@@ -6,8 +6,7 @@ services:
     plan: free
     region: oregon
     buildCommand: npm ci && npx prisma generate && npm run build
-    preDeployCommand: npx prisma migrate deploy
-    startCommand: npm run start
+    startCommand: npx prisma migrate deploy && npm run start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
