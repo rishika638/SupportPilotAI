@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-25",
+  "environment": {
+    "kind": "local Docker development environment",
+    "apiBaseUrl": "http://localhost:3001/api/v1",
+    "database": "supportpilot_performance",
+    "datasetCaveat": "The successful k6 runs occurred before the later 10000-ticket seed. Exact row count for each run was not preserved with the terminal summary.",
+    "rawSuccessfulRunOutputPresentInSuppliedArchive": false
+  },
+  "provenance": {
+    "kind": "terminal summaries reported by the user from the Windsurf session",
+    "note": "These are summaries, not raw k6 exports. Save matching raw successful-run output before presenting them as independently reproducible evidence."
+  },
+  "scenarios": [
+    {
+      "name": "ticket-listing",
+      "status": "configured thresholds passed",
+      "vus": 10,
+      "holdDuration": "30s",
+      "httpRequests": 281,
+      "httpFailures": 0,
+      "httpFailureRate": 0.0,
+      "p95Ms": 91.11,
+      "p99Ms": 98.02,
+      "maxMs": 2093,
+      "notes": [
+        "One request exceeded the separate 500 ms per-request check.",
+        "All configured thresholds passed in the reported successful run."
+      ]
+    },
+    {
+      "name": "ticket-creation",
+      "status": "configured thresholds passed in the later reported run",
+      "maxVus": 5,
+      "duration": "approximately 2 minutes",
+      "httpRequestsIncludingLogin": 229,
+      "ticketsCreated": 228,
+      "httpFailures": 0,
+      "httpFailureRate": 0.0,
+      "p95Ms": 86.96,
+      "p99Ms": 154.14,
+      "throughputRequestsPerSecond": 1.81,
+      "notes": [
+        "The successful run was reported against local port 3001.",
+        "The ticket-creation.json file in the supplied archive is a separate earlier failed run against port 3000 and must not be treated as this run's raw evidence."
+      ]
+    },
+    {
+      "name": "mixed-workload",
+      "status": "configured thresholds passed with failures requiring investigation",
+      "maxVus": 20,
+      "httpRequestsIncludingLogin": 4311,
+      "operations": 4310,
+      "httpFailures": 164,
+      "httpFailureRate": 0.038,
+      "p95Ms": 75.52,
+      "p99Ms": 113.1,
+      "throughputRequestsPerSecond": 12.6,
+      "workloadDistribution": {
+        "ticketListing": 0.7,
+        "ticketDetail": 0.2,
+        "ticketCreation": 0.1
+      },
+      "notes": [
+        "Failure response-code breakdown was not captured in the reported summary.",
+        "Do not claim zero errors; classify the failures before making reliability claims."
+      ]
+    }
+  ]
+}

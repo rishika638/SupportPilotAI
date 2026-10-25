@@ -5,6 +5,7 @@ import { useAuth } from './auth/useAuth'
 import { DashboardPage } from './pages/DashboardPage'
 import { InboxPage } from './pages/InboxPage'
 import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import { NewTicketPage } from './pages/NewTicketPage'
 import { TicketDetailPage } from './pages/TicketDetailPage'
 
@@ -19,6 +20,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
       <Route element={user ? <AppShell /> : <Navigate to="/login" replace state={{ from: location }} />}>
         <Route index element={<DashboardPage />} />
         <Route path="/tickets" element={<InboxPage />} />

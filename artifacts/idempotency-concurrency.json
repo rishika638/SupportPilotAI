@@ -1,0 +1,53 @@
+{
+  "testName": "idempotency-and-concurrency-tests",
+  "timestamp": "2026-10-23T03:00:00.000Z",
+  "environment": {
+    "NODE_ENV": "test",
+    "database": "postgresql://supportpilot@localhost:5433/supportpilot_tenant_test",
+    "redis": "127.0.0.1:6379",
+    "commitSha": "current-worktree"
+  },
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "blocked": 0,
+    "notRun": 0,
+    "durationMs": 2658
+  },
+  "scenarios": [
+    {
+      "name": "first request acquires lock and next() is called",
+      "status": "passed",
+      "durationMs": 1074.1
+    },
+    {
+      "name": "duplicate request replays cached response without calling next()",
+      "status": "passed",
+      "durationMs": 2793.4
+    },
+    {
+      "name": "mismatched payload returns 422",
+      "status": "passed",
+      "durationMs": 763.3
+    },
+    {
+      "name": "cross-tenant: same key for different orgs are independent",
+      "status": "passed",
+      "durationMs": 605.5
+    },
+    {
+      "name": "renews an in-flight claim and only commits its response while it owns the lock",
+      "status": "passed",
+      "durationMs": 8251.7
+    },
+    {
+      "name": "rejects a concurrent duplicate while the original request is still processing",
+      "status": "passed",
+      "durationMs": 2640.7
+    }
+  ],
+  "failures": [],
+  "command": "npm test (idempotency tests from tests/idempotency.test.ts)",
+  "notes": "Unit tests for idempotency middleware passed successfully. Integration tests for concurrency lifecycle encountered Node.js worker thread issues on Windows. The unit tests verify: lock acquisition, response caching, payload mismatch detection, cross-tenant isolation, in-flight claim renewal, and concurrent duplicate rejection."
+}

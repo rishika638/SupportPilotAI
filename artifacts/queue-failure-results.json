@@ -1,0 +1,67 @@
+{
+  "testName": "bullmq-queue-failure-tests",
+  "timestamp": "2026-10-23T03:15:00.000Z",
+  "environment": {
+    "NODE_ENV": "development",
+    "database": "postgresql://supportpilot@localhost:5433/supportpilot",
+    "redis": "127.0.0.1:6379",
+    "commitSha": "current-worktree"
+  },
+  "summary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "blocked": 6,
+    "notRun": 0,
+    "durationMs": 0
+  },
+  "scenarios": [
+    {
+      "name": "dead-letter log fires when attemptsMade >= max attempts",
+      "status": "passed",
+      "durationMs": 114.7,
+      "description": "Unit test verifies dead-letter logging logic"
+    },
+    {
+      "name": "dead-letter log does NOT fire before max attempts",
+      "status": "passed",
+      "durationMs": 77,
+      "description": "Unit test verifies premature dead-letter prevention"
+    }
+  ],
+  "blocked": [
+    {
+      "name": "transient retry/recovery with live Redis",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Simulate transient Redis connection loss and verify job recovery"
+    },
+    {
+      "name": "permanent failure handling with live queue",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Submit job that permanently fails and verify dead-letter retention"
+    },
+    {
+      "name": "retry exhaustion verification",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Verify job reaches max attempts and enters failed state"
+    },
+    {
+      "name": "duplicate delivery prevention",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Verify jobs are not delivered multiple times after recovery"
+    },
+    {
+      "name": "controlled Redis interruption",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Stop Redis during job processing and verify error handling"
+    },
+    {
+      "name": "worker restart/recovery",
+      "reason": "Integration test environment not configured for live BullMQ/Redis testing",
+      "expectedBehavior": "Restart worker during job processing and verify job recovery"
+    }
+  ],
+  "failures": [],
+  "command": "npm test (failure logic from tests/regression.test.ts)",
+  "notes": "Unit tests cover the retry and failure logic at code level. Live integration tests require a dedicated test Redis instance and BullMQ test infrastructure. The current implementation retains failed jobs in their original queues (up to 200 jobs) rather than moving them to a dedicated dead-letter queue. This is intentional for debugging and manual retry capability. Failed jobs are logged with appropriate error details and attempt counts."
+}

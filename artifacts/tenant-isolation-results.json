@@ -1,0 +1,62 @@
+{
+  "testName": "tenant-isolation-integration-tests",
+  "timestamp": "2026-10-23T02:54:10.000Z",
+  "environment": {
+    "NODE_ENV": "test",
+    "database": "postgresql://supportpilot@localhost:5433/supportpilot_tenant_test",
+    "redis": "127.0.0.1:6379",
+    "commitSha": "current-worktree"
+  },
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "blocked": 0,
+    "notRun": 0,
+    "durationMs": 11427.8161
+  },
+  "scenarios": [
+    {
+      "name": "requires authentication for protected routes",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "denies cross-tenant ticket and AI-analysis reads",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "denies cross-tenant ticket mutations, comments, and assignments",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "scopes team and member reads and mutations",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "scopes ticket search, filters, pagination",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "returns analytics calculated only from Organization A tickets",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "keeps notifications isolated by authenticated user and organization",
+      "status": "passed",
+      "durationMs": null
+    },
+    {
+      "name": "applies manager team scope and rejects agent-only role escalation",
+      "status": "passed",
+      "durationMs": 533.9172
+    }
+  ],
+  "failures": [],
+  "command": "NODE_ENV=test TENANT_TEST_DATABASE_URL=postgresql://supportpilot:change-me-postgres-password@localhost:5433/supportpilot_tenant_test?schema=public npm run test:integration"
+}

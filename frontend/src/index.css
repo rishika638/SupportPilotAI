@@ -70,7 +70,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .quick-search:hover { border-color: #bdc8f8; }
 kbd { margin-left: auto; background: #f4f5f8; border: 1px solid #e8eaf0; border-radius: 4px; padding: 1px 5px; color: #929aaa; font: 9px ui-sans-serif, system-ui; }
 .top-notifications { position: relative; }
-.top-notifications::after { content: ""; position: absolute; top: 7px; right: 7px; height: 5px; width: 5px; background: #5271eb; border-radius: 50%; border: 1px solid white; }
 .page-content { max-width: 1440px; margin: 0 auto; padding: 35px 38px 48px; }
 .page-heading { margin-bottom: 26px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .eyebrow { color: #8a95a7; font-weight: 700; font-size: 9px; letter-spacing: 1.25px; margin: 0 0 9px; }
@@ -323,7 +322,6 @@ h1, h2, h3, p { margin-top: 0; }
 }
 @media (max-width: 650px) {
   .topbar { padding: 0 13px; }
-  .topbar-actions .top-notifications { display: none; }
   .top-new { min-height: 33px; padding: 0 9px; font-size: 9px; }
   .breadcrumb { font-size: 10px; }
   .page-content { padding: 23px 14px 30px; }
@@ -364,6 +362,42 @@ h1, h2, h3, p { margin-top: 0; }
   .login-panel { min-height: 100vh; padding: 22px 24px 17px; }
   .login-aside { display: none; }
   .login-form-wrap { max-width: 390px; }
+  .register-name-fields { gap: 8px; }
+  .register-name-fields .input-with-icon { padding: 0 7px; gap: 5px; }
+  .register-name-fields .input-with-icon svg { flex: 0 0 15px; width: 15px; }
+}
+
+.auth-switch { margin: 16px 0 0; color: #7e899a; font-size: 10px; text-align: center; }
+.auth-switch a { color: #4263eb; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.session-retry { margin-left: 7px; padding: 0; border: 0; color: #4263eb; background: transparent; font-size: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.session-retry:disabled { opacity: .6; cursor: wait; }
+.register-form > label { margin-top: 15px; }
+.register-name-fields { margin-bottom: 0; }
+.notification-menu { position: relative; }
+.notification-menu > .icon-button { position: relative; color: #778397; }
+.notification-count { position: absolute; top: 0; right: -2px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; border: 1px solid white; border-radius: 9px; color: white; background: #4263eb; font-size: 8px; font-weight: 700; }
+.notification-panel { position: absolute; top: calc(100% + 12px); right: -20px; z-index: 30; width: min(370px, calc(100vw - 28px)); max-height: min(520px, calc(100vh - 85px)); overflow: auto; border: 1px solid #e6eaf1; border-radius: 11px; background: white; box-shadow: 0 16px 40px #1c2d4b20; }
+.notification-panel-heading { position: sticky; top: 0; z-index: 1; padding: 14px 15px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #edf0f5; background: white; }
+.notification-panel-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.notification-panel-heading strong { color: #26344a; font-size: 12px; }
+.notification-panel-heading span { color: #8792a3; font-size: 9px; }
+.notification-mark-all { padding: 5px 7px; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; color: #5369c8; background: #f3f5ff; font-size: 9px; cursor: pointer; }
+.notification-mark-all:disabled { color: #a0a8b5; background: #f7f8fa; cursor: not-allowed; }
+.notification-panel > .notice { margin: 10px; }
+.notification-panel .loading-block { padding: 18px; }
+.notifications-empty { margin: 0; padding: 24px 15px; color: #8792a3; font-size: 11px; text-align: center; }
+.notification-item { width: 100%; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border: 0; border-bottom: 1px solid #f0f2f6; background: white; text-align: left; cursor: pointer; }
+.notification-item:hover { background: #f8f9fc; }
+.notification-item:disabled { cursor: wait; opacity: .65; }
+.notification-unread-dot { width: 7px; height: 7px; flex: 0 0 7px; margin-top: 5px; border-radius: 50%; background: #4263eb; }
+.notification-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.notification-copy strong { color: #303d52; font-size: 10px; }
+.notification-copy > span { color: #687589; font-size: 10px; line-height: 1.45; }
+.notification-copy small { color: #99a2b0; font-size: 8px; }
+.account-created-notice { position: relative; margin-bottom: 16px; }
+.account-created-notice .notice { padding-right: 38px; }
+@media (max-width: 650px) {
+  .notification-panel { right: -90px; }
 }
 @media (max-width: 420px) {
   .page-heading { gap: 8px; }

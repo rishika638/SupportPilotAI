@@ -5,13 +5,14 @@ import { ApiError } from '../api/client'
 import { useAuth } from '../auth/useAuth'
 
 export function LoginPage() {
-  const { login, user, loading } = useAuth()
+  const { login, user, loading, sessionError, retrySession } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const logoutWarning = (location.state as { logoutWarning?: string } | null)?.logoutWarning
 
   if (user) return <Navigate to="/" replace />
 
@@ -38,6 +39,8 @@ export function LoginPage() {
           <div className="login-kicker"><span className="live-dot" /> CUSTOMER OPERATIONS PLATFORM</div>
           <h1>Welcome back</h1>
           <p className="login-subtitle">Sign in to your support workspace to pick up where you left off.</p>
+          {logoutWarning && <div className="login-error" role="alert">You were signed out of this browser, but the server could not confirm session revocation: {logoutWarning}</div>}
+          {sessionError && <div className="login-error" role="alert">{sessionError}{sessionStorage.getItem('supportpilot.accessToken') && <button className="session-retry" type="button" onClick={() => { void retrySession() }} disabled={loading}>Retry session</button>}</div>}
           {error && <div className="login-error" role="alert">{error}</div>}
           <form className="login-form" onSubmit={handleSubmit}>
             <label htmlFor="email">Work email</label>
@@ -48,6 +51,7 @@ export function LoginPage() {
               {submitting ? 'Signing in…' : 'Sign in'} <ArrowRight size={17} />
             </button>
           </form>
+          <p className="auth-switch">New to SupportPilot? <Link to="/register">Create an account</Link></p>
           <p className="login-footnote">Protected workspace access · Your organization controls permissions</p>
         </div>
         <div className="login-footer"><span>© 2026 SupportPilot AI</span><span>Built for better support</span></div>

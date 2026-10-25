@@ -80,6 +80,21 @@ jobs:
           JWT_ACCESS_SECRET: test-github-actions-jwt-access-secret-min-32-chars
           JWT_REFRESH_SECRET: test-github-actions-jwt-refresh-secret-min-32-chars
 
+      - name: Create isolated tenant integration database
+        run: psql -h 127.0.0.1 -U supportpilot -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE supportpilot_tenant_test'
+        env:
+          PGPASSWORD: supportpilot
+
+      - name: Run tenant-isolation integration tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          TENANT_TEST_DATABASE_URL: postgresql://supportpilot:supportpilot@127.0.0.1:5432/supportpilot_tenant_test?schema=public
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_ACCESS_SECRET: test-github-actions-jwt-access-secret-min-32-chars
+          JWT_REFRESH_SECRET: test-github-actions-jwt-refresh-secret-min-32-chars
+
       - name: Run Build
         run: npm run build
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Activity,
   Command,
@@ -12,6 +12,8 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
+import { NotificationMenu } from './NotificationMenu'
+import { SuccessNotice } from './Primitives'
 
 const navigation = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -21,8 +23,12 @@ const navigation = [
 
 export function AppShell() {
   const { user, organization, logout } = useAuth()
+  const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [accountCreated, setAccountCreated] = useState(
+    (location.state as { accountCreated?: boolean } | null)?.accountCreated === true,
+  )
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -30,6 +36,9 @@ export function AppShell() {
     try {
       await logout()
       navigate('/login', { replace: true })
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'The server could not confirm session revocation.'
+      navigate('/login', { replace: true, state: { logoutWarning: message } })
     } finally {
       setLoggingOut(false)
     }
@@ -83,10 +92,14 @@ export function AppShell() {
           <div className="breadcrumb"><span>Support</span><span className="crumb-slash">/</span><strong>Workspace</strong></div>
           <div className="topbar-actions">
             <Link className="quick-search" to="/tickets"><Search size={16} /><span>Search tickets</span></Link>
+            <NotificationMenu />
             <Link className="button button-primary button-small top-new" to="/tickets/new"><Plus size={16} />New ticket</Link>
           </div>
         </header>
-        <div className="page-content"><Outlet /></div>
+        <div className="page-content">
+          {accountCreated && <div className="account-created-notice"><SuccessNotice message="Your account and workspace are ready." /><button className="dismiss-notice" onClick={() => setAccountCreated(false)} aria-label="Dismiss">×</button></div>}
+          <Outlet />
+        </div>
       </main>
     </div>
   )

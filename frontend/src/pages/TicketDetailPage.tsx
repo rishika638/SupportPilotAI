@@ -7,9 +7,11 @@ import { api, ApiError } from '../api/client'
 import type { AIAnalysis, TicketPriority, TicketStatus } from '../api/types'
 import { ErrorNotice, LoadingBlock, PageHeading, PriorityBadge, StatusBadge, SuccessNotice } from '../components/Primitives'
 import { formatRelative } from '../utils/date'
+import { useAuth } from '../auth/useAuth'
 
 export function TicketDetailPage() {
   const { id = '' } = useParams()
+  const { role } = useAuth()
   const location = useLocation()
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
@@ -18,6 +20,11 @@ export function TicketDetailPage() {
   const [success, setSuccess] = useState(location.state?.created ? 'Ticket created successfully.' : '')
   const ticket = useQuery({ queryKey: ['ticket', id], queryFn: () => api.getTicket(id), enabled: Boolean(id) })
   const comments = useQuery({ queryKey: ['ticket-comments', id], queryFn: () => api.comments(id), enabled: Boolean(id) })
+  const teams = useQuery({
+    queryKey: ['teams'],
+    queryFn: api.listTeams,
+    enabled: role === 'ADMIN' || role === 'MANAGER',
+  })
   const analysis = useQuery({
     queryKey: ['ticket-ai', id],
     queryFn: async () => {
@@ -52,6 +59,15 @@ export function TicketDetailPage() {
   const statusUpdate = useMutation({
     mutationFn: (status: TicketStatus) => api.changeStatus(id, status),
     onSuccess: async () => { setActionError(''); setSuccess('Ticket status updated.'); await refreshTicketData() },
+    onError: (error: Error) => setActionError(error.message),
+  })
+  const teamAssignment = useMutation({
+    mutationFn: (teamId: string) => api.assignTicketToTeam(id, teamId),
+    onSuccess: async () => {
+      setActionError('')
+      setSuccess('Ticket assigned to team.')
+      await refreshTicketData()
+    },
     onError: (error: Error) => setActionError(error.message),
   })
   const sendComment = useMutation({
@@ -114,6 +130,25 @@ export function TicketDetailPage() {
               {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
             </select>
             <div className="detail-divider" />
+            {(role === 'ADMIN' || role === 'MANAGER') && (
+              <>
+                <label className="detail-label" htmlFor="ticket-team">Team assignment</label>
+                {teams.isLoading ? <LoadingBlock label="Loading teams…" /> : teams.isError ? (
+                  <ErrorNotice message={teams.error.message} />
+                ) : teams.data?.teams.length ? (
+                  <select
+                    id="ticket-team"
+                    className="detail-select"
+                    value={currentTicket.teamId ?? ''}
+                    onChange={(event) => { if (event.target.value) teamAssignment.mutate(event.target.value) }}
+                    disabled={teamAssignment.isPending}
+                  >
+                    <option value="" disabled>Select a team to assign</option>
+                    {teams.data.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  </select>
+                ) : <p className="muted-cell">No teams are available.</p>}
+              </>
+            )}
             <DetailRow label="Assignee" value={currentTicket.assignee ? `${currentTicket.assignee.firstName} ${currentTicket.assignee.lastName}` : currentTicket.teamName || 'Unassigned'} icon={<UserRound size={15} />} />
             <DetailRow label="Created" value={new Date(currentTicket.createdAt).toLocaleDateString()} icon={<CalendarDays size={15} />} />
             <DetailRow label="Last updated" value={formatRelative(currentTicket.updatedAt)} icon={<Clock3 size={15} />} />

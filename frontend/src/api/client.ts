@@ -5,11 +5,14 @@ import type {
   ApiErrorEnvelope,
   AuthResponse,
   MeResponse,
+  NotificationList,
+  RegisterInput,
   Ticket,
   TicketComments,
   TicketListParams,
   TicketPage,
   TicketStatus,
+  Team,
   Tokens,
 } from './types'
 
@@ -55,9 +58,8 @@ function expireSession() {
 async function responseJson<T>(response: Response): Promise<T> {
   const body = await response.json() as ApiEnvelope<T> | ApiErrorEnvelope
   if (!response.ok || !body.success) {
-    const apiError = body.success
-      ? undefined
-      : body.error
+    const apiError = 'error' in body ? body.error : undefined
+
     throw new ApiError(
       apiError?.message || `Request failed with status ${response.status}`,
       response.status,
@@ -84,9 +86,12 @@ async function refreshAccessToken(): Promise<boolean> {
         const data = await responseJson<{ tokens: Tokens }>(response)
         saveTokens(data.tokens)
         return true
-      } catch {
-        expireSession()
-        return false
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          expireSession()
+          return false
+        }
+        throw error
       } finally {
         refreshRequest = null
       }
@@ -122,6 +127,11 @@ async function request<T>(
 const json = (value: unknown): string => JSON.stringify(value)
 
 export const api = {
+  register: (payload: RegisterInput) =>
+    request<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: json(payload),
+    }),
   login: (email: string, password: string) =>
     request<AuthResponse>('/auth/login', {
       method: 'POST',
@@ -174,4 +184,18 @@ export const api = {
   aiAnalysis: (id: string) =>
     request<AIAnalysis>(`/tickets/${encodeURIComponent(id)}/ai-analysis`),
   analytics: () => request<AnalyticsOverview>('/analytics/overview'),
+  listTeams: () => request<{ teams: Team[] }>('/teams'),
+  assignTicketToTeam: (id: string, teamId: string) =>
+    request<{ ticket: Ticket }>(`/tickets/${encodeURIComponent(id)}/assign`, {
+      method: 'POST',
+      body: json({ teamId }),
+    }),
+  notifications: (limit = 10) =>
+    request<NotificationList>(`/notifications?unread=true&limit=${limit}&offset=0`),
+  markNotificationRead: (id: string) =>
+    request<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, {
+      method: 'PATCH',
+    }),
+  markAllNotificationsRead: () =>
+    request<{ success: boolean }>('/notifications/read-all', { method: 'PATCH' }),
 }

@@ -1,0 +1,74 @@
+{
+  "testName": "ticket-lifecycle-concurrency-tests",
+  "timestamp": "2026-10-23T03:00:00.000Z",
+  "environment": {
+    "NODE_ENV": "test",
+    "database": "postgresql://supportpilot@localhost:5433/supportpilot_tenant_test",
+    "redis": "127.0.0.1:6379",
+    "commitSha": "current-worktree"
+  },
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "blocked": 5,
+    "notRun": 0,
+    "durationMs": 4474
+  },
+  "scenarios": [
+    {
+      "name": "sequential allocation produces unique incrementing numbers",
+      "status": "passed",
+      "durationMs": 151,
+      "note": "Unit test verifies ticket number uniqueness"
+    },
+    {
+      "name": "P2002 conflict triggers retry (logic check)",
+      "status": "passed",
+      "durationMs": 73.7,
+      "note": "Unit test verifies conflict handling logic"
+    },
+    {
+      "name": "Ticket state machine – full lifecycle",
+      "status": "passed",
+      "durationMs": 2255.4,
+      "note": "Unit test validates all valid state transitions"
+    },
+    {
+      "name": "Ticket number allocation – concurrency invariant",
+      "status": "passed",
+      "durationMs": 311.7,
+      "note": "Unit test for ticket number concurrency"
+    }
+  ],
+  "blocked": [
+    {
+      "name": "concurrent ticket numbering produces unique numbers (integration)",
+      "reason": "Node.js worker thread initialization error on Windows (ERR_WORKER_INIT_FAILED)",
+      "expectedBehavior": "Verify concurrent ticket creation produces unique numbers via HTTP API"
+    },
+    {
+      "name": "duplicate idempotent requests replay cached response (integration)",
+      "reason": "Node.js worker thread initialization error on Windows",
+      "expectedBehavior": "Verify idempotency via real HTTP requests"
+    },
+    {
+      "name": "idempotency key mismatch rejects with 422 (integration)",
+      "reason": "Node.js worker thread initialization error on Windows",
+      "expectedBehavior": "Verify payload mismatch detection via HTTP API"
+    },
+    {
+      "name": "status transitions respect state machine (integration)",
+      "reason": "Node.js worker thread initialization error on Windows",
+      "expectedBehavior": "Verify state machine enforcement via HTTP API"
+    },
+    {
+      "name": "cross-tenant idempotency keys are independent (integration)",
+      "reason": "Node.js worker thread initialization error on Windows",
+      "expectedBehavior": "Verify idempotency isolation across tenants"
+    }
+  ],
+  "failures": [],
+  "command": "npm test (lifecycle tests from regression.test.ts)",
+  "notes": "Unit tests for ticket lifecycle passed successfully. Integration tests encountered Node.js worker thread issues on Windows during test execution. The unit tests verify: sequential ticket number allocation, conflict handling, complete state machine transitions, and ticket number concurrency invariants."
+}

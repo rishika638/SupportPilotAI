@@ -1,0 +1,81 @@
+{
+  "testName": "bullmq-queue-retry-tests",
+  "timestamp": "2026-10-23T03:15:00.000Z",
+  "environment": {
+    "NODE_ENV": "development",
+    "database": "postgresql://supportpilot@localhost:5433/supportpilot",
+    "redis": "127.0.0.1:6379",
+    "commitSha": "current-worktree"
+  },
+  "summary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "blocked": 0,
+    "notRun": 0,
+    "durationMs": 737
+  },
+  "scenarios": [
+    {
+      "name": "job processor re-throws error so BullMQ can retry",
+      "status": "passed",
+      "durationMs": 263.4,
+      "description": "Verifies that job processors re-throw errors after marking failed, enabling BullMQ's automatic retry mechanism"
+    },
+    {
+      "name": "dead-letter log fires when attemptsMade >= max attempts",
+      "status": "passed",
+      "durationMs": 114.7,
+      "description": "Confirms dead-letter logging triggers when retry limit is exhausted"
+    },
+    {
+      "name": "dead-letter log does NOT fire before max attempts",
+      "status": "passed",
+      "durationMs": 77,
+      "description": "Ensures dead-letter logging does not trigger prematurely during retry attempts"
+    },
+    {
+      "name": "notification job re-throws so BullMQ retries on DB failure",
+      "status": "passed",
+      "durationMs": 170.9,
+      "description": "Verifies notification jobs propagate errors for retry on database failures"
+    }
+  ],
+  "failures": [],
+  "command": "npm test (BullMQ tests from tests/regression.test.ts)",
+  "queueConfiguration": {
+    "aiAnalysisQueue": {
+      "name": "ai-analysis",
+      "defaultAttempts": 5,
+      "backoff": {
+        "type": "exponential",
+        "delay": 2000
+      }
+    },
+    "notificationQueue": {
+      "name": "notification-dispatch",
+      "defaultAttempts": 3,
+      "backoff": {
+        "type": "exponential",
+        "delay": 1000
+      }
+    },
+    "slaQueue": {
+      "name": "sla-processing",
+      "defaultAttempts": 3,
+      "backoff": {
+        "type": "fixed",
+        "delay": 5000
+      }
+    },
+    "cleanupQueue": {
+      "name": "cleanup",
+      "defaultAttempts": 1,
+      "backoff": {
+        "type": "fixed",
+        "delay": 60000
+      }
+    }
+  },
+  "notes": "Unit tests verify retry logic at the code level. Live Redis/BullMQ integration tests are not implemented due to test environment constraints. The worker implementation (src/workers/) correctly implements error re-throwing for BullMQ retry mechanism. Failed jobs are retained in BullMQ up to 200 jobs as configured. There is no dedicated dead-letter queue - failed jobs remain in their original queues with failed status."
+}

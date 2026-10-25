@@ -46,6 +46,14 @@ export interface AuthResponse {
   tokens: Tokens
 }
 
+export interface RegisterInput {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  organizationName: string
+}
+
 export interface MeResponse {
   user: User
   organization: Organization
@@ -154,4 +162,31 @@ export interface TicketListParams {
   status?: TicketStatus
   priority?: TicketPriority
   search?: string
+}
+
+export interface Team {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  isDefault: boolean
+  memberCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Notification {
+  id: string
+  ticketId: string | null
+  title: string
+  body: string
+  readAt: string | null
+  createdAt: string
+}
+
+export interface NotificationList {
+  notifications: Notification[]
+  total: number
+  limit: number
+  offset: number
 }
