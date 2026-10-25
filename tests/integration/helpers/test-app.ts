@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { once } from "node:events";
 import type { Server } from "node:http";
+import { shutdownApp } from "../../../src/app";
+import { closeQueues } from "../../../src/infrastructure/queue/queue.factory";
 
 const databaseUrl = process.env.TENANT_TEST_DATABASE_URL;
 assert.equal(process.env.NODE_ENV, "test", "Integration tests must run with NODE_ENV=test.");
@@ -81,10 +83,46 @@ export async function startTestApp(): Promise<TestApplication> {
       };
     },
     async close() {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => error ? reject(error) : resolve());
-      });
-      await prisma.$disconnect();
+      let serverCloseError: unknown;
+      const cleanupErrors: unknown[] = [];
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+      } catch (error) {
+        serverCloseError = error;
+      }
+
+      try {
+        await closeQueues();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+
+      try {
+        await shutdownApp();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+
+      try {
+        await prisma.$disconnect();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+
+      if (serverCloseError) cleanupErrors.unshift(serverCloseError);
+
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          cleanupErrors,
+          "Integration test application cleanup failed.",
+        );
+      }
     },
   };
 }
