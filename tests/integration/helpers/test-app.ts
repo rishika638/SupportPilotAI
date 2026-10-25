@@ -57,7 +57,7 @@ export async function startTestApp(): Promise<TestApplication> {
         new Headers(options.headers).forEach((value, key) => {
           headers.set(key, value);
         });
-      }      
+      }
       if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
       if (options.body !== undefined) headers.set("Content-Type", "application/json");
 

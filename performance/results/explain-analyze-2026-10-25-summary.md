@@ -1,7 +1,7 @@
 # EXPLAIN ANALYZE summary — 2026-10-25
 
-**Target:** local `supportpilot_performance` database  
-**Dataset:** 10,000 tickets for the performance organization  
+**Target:** local `supportpilot_performance` database
+**Dataset:** 10,000 tickets for the performance organization
 **Method:** `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT TEXT)` for read-only representative queries.
 
 | Query | Execution time | Rows returned | Buffers / observations |

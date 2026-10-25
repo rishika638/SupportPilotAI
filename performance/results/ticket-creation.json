@@ -1,9 +1,9 @@
 
-         /\      Grafana   /‾‾/  
-    /\  /  \     |\  __   /  /   
-   /  \/    \    | |/ /  /   ‾‾\ 
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
   /          \   |   (  |  (‾)  |
- / __________ \  |_|\_\  \_____/ 
+ / __________ \  |_|\_\  \_____/
 
 
      execution: local
@@ -4597,7 +4597,7 @@ iled","type":"Point","data":{"time":"2026-10-25T16:24:17.332464362Z","value":0,"
 {"metric":"iterations","type":"Point","data":{"time":"2026-10-25T16:24:19.332862541Z","value":1,"tags":{"group":"","scenario":"default"}}}
 
 
-  █ THRESHOLDS 
+  █ THRESHOLDS
 
     errors
     ✗ 'rate<0.05' rate=18.96%
@@ -4610,7 +4610,7 @@ iled","type":"Point","data":{"time":"2026-10-25T16:24:17.332464362Z","value":0,"
     ✗ 'rate<0.05' rate=18.88%
 
 
-  █ TOTAL RESULTS 
+  █ TOTAL RESULTS
 
     checks_total.......: 696    5.531002/s
     checks_succeeded...: 87.35% 608 out of 696
@@ -4626,13 +4626,13 @@ iled","type":"Point","data":{"time":"2026-10-25T16:24:17.332464362Z","value":0,"
     errors.........................: 18.96% 44 out of 232
 
     HTTP
-    http_req_duration..............: avg=33.35ms min=6.37ms  med=34.74ms max=248.81ms p(90)=48ms    p(95)=54.4ms 
+    http_req_duration..............: avg=33.35ms min=6.37ms  med=34.74ms max=248.81ms p(90)=48ms    p(95)=54.4ms
       { expected_response:true }...: avg=38.75ms min=18.97ms med=36.76ms max=248.81ms p(90)=49.58ms p(95)=54.83ms
     http_req_failed................: 18.88% 44 out of 233
     http_reqs......................: 233    1.851614/s
 
     EXECUTION
-    iteration_duration.............: avg=2.03s   min=2s      med=2.03s   max=2.06s    p(90)=2.04s   p(95)=2.05s  
+    iteration_duration.............: avg=2.03s   min=2s      med=2.03s   max=2.06s    p(90)=2.04s   p(95)=2.05s
     iterations.....................: 232    1.843667/s
     vus............................: 1      min=1         max=5
     vus_max........................: 5      min=5         max=5
